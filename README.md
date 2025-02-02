@@ -1,5 +1,3 @@
-# Projet-Web-L2-Aziz-Fadl
+# Applicatioin web de gestion d'abonnement.
 
 Membres : Aziz Djouder, Fadl Zemzem.
-
-Applicatioin web  de gestion d'abonnement.
