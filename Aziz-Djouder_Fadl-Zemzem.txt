@@ -13,10 +13,17 @@ Groupe:
 
 Description de la problématique:
 
-Avec la multiplication des services en ligne, la gestion des abonnements numériques est devenue un véritable casse-tête.
+    Avec la multiplication des services en ligne, la gestion des abonnements numériques est devenue un véritable casse-tête.
 
-De nombreux utilisateurs s’inscrivent à des services en ligne (streaming, jeux, logiciels, newsletters), la plupart du temps juste pour utiliser le service en question une seule fois, et cela sans toujours garder une trace précise de leurs engagements. Avec le temps, ils accumulent des abonnements qu’ils n’utilisent plus ou oublient de résilier, ce qui entraîne des dépenses inutiles et des boîtes mail souvent saturées de courriels promotionnels et de newsletters indésirables, auxquelles les utilisateurs se sont abonnés parfois sans s’en rendre compte.
+    De nombreux utilisateurs s’inscrivent à des services en ligne (streaming, jeux, logiciels, newsletters),
+la plupart du temps juste pour utiliser le service en question une seule fois, et cela sans toujours garder une trace précise de leurs engagements.
+Avec le temps, ils accumulent des abonnements qu’ils n’utilisent plus ou oublient de résilier,
+ce qui entraîne des dépenses inutiles et des boîtes mail souvent saturées de courriels promotionnels et de newsletters indésirables,
+auxquelles les utilisateurs se sont abonnés parfois sans s’en rendre compte.
 
-Il est fastidieux de retrouver ces abonnements et encore plus de s’en désinscrire. Certains services rendent volontairement le processus de résiliation complexe, obligeant les utilisateurs à naviguer sur plusieurs pages avant de pouvoir annuler un abonnement.
+Il est fastidieux de retrouver ces abonnements et encore plus de s’en désinscrire.
+Certains services rendent volontairement le processus de résiliation complexe,
+obligeant les utilisateurs à naviguer sur plusieurs pages avant de pouvoir annuler un abonnement.
 
-Ce manque de visibilité et de contrôle sur les abonnements pose un problème de gestion des comptes et de protection des données personnelles, car les comptes en ligne restent actifs même lorsque l’utilisateur ne les utilise plus.
+    Ce manque de visibilité et de contrôle sur les abonnements pose un problème de gestion des comptes et de protection des données personnelles,
+car les comptes en ligne restent actifs même lorsque l’utilisateur ne les utilise plus.
