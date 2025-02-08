@@ -13,7 +13,8 @@ Groupe:
 
 Description de la problématique:
 
-    Avec la multiplication des services en ligne, la gestion des abonnements numériques est devenue un véritable casse-tête.
+    Avec la multiplication des services en ligne,
+la gestion des abonnements numériques est devenue un véritable casse-tête.
 
     De nombreux utilisateurs s’inscrivent à des services en ligne (streaming, jeux, logiciels, newsletters),
 la plupart du temps juste pour utiliser le service en question une seule fois, et cela sans toujours garder une trace précise de leurs engagements.
