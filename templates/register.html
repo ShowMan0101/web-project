@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-page">
+    <div class="auth-container">
+        <div class="auth-box">
+            <div class="auth-header">
+                <h2>Créer un compte</h2>
+                <p>Rejoignez SubManager</p>
+            </div>
+
+            <!-- Ajout de la méthode et de l'action dans le formulaire -->
+            <form method="POST" action="{{ url_for('register') }}" class="auth-form">
+                <div class="form-group">
+                    <label for="email">
+                        <i class="fas fa-envelope"></i>
+                        Email
+                    </label>
+                    <input type="email" id="email" name="email" required class="form-control" placeholder="Votre email">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">
+                        <i class="fas fa-lock"></i>
+                        Mot de passe
+                    </label>
+                    <div class="password-input">
+                        <input type="password" id="password" name="password" required class="form-control"
+                            placeholder="Créez un mot de passe" minlength="8">
+                        <i class="fas fa-eye toggle-password" onclick="togglePassword('password')"></i>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm_password">
+                        <i class="fas fa-lock"></i>
+                        Confirmer le mot de passe
+                    </label>
+                    <div class="password-input">
+                        <input type="password" id="confirm_password" name="confirm_password" required
+                            class="form-control" placeholder="Confirmez votre mot de passe">
+                        <i class="fas fa-eye toggle-password" onclick="togglePassword('confirm_password')"></i>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-user-plus"></i>
+                    S'inscrire
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <p>Déjà un compte ?</p>
+                <a href="{{ url_for('login') }}" class="btn btn-outline">
+                    Se connecter
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .auth-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 20px;
+    }
+
+    .auth-container {
+        width: 100%;
+        max-width: 400px;
+    }
+
+    .auth-box {
+        background: white;
+        padding: 40px;
+        border-radius: 15px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+
+    .auth-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .auth-header h2 {
+        color: #2c3e50;
+        margin-bottom: 10px;
+    }
+
+    .auth-header p {
+        color: #7f8c8d;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #2c3e50;
+    }
+
+    .form-group label i {
+        margin-right: 8px;
+        color: #3498db;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 12px 15px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 16px;
+        transition: all 0.3s ease;
+    }
+
+    .form-control:focus {
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    }
+
+    .password-input {
+        position: relative;
+    }
+
+    .toggle-password {
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: pointer;
+        color: #95a5a6;
+    }
+
+    .btn {
+        width: 100%;
+        padding: 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+        background: #3498db;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #2980b9;
+    }
+
+    .btn-outline {
+        background: transparent;
+        border: 2px solid #3498db;
+        color: #3498db;
+    }
+
+    .btn-outline:hover {
+        background: #3498db;
+        color: white;
+    }
+
+    .auth-footer {
+        text-align: center;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #e0e0e0;
+    }
+
+    .auth-footer p {
+        margin-bottom: 15px;
+        color: #7f8c8d;
+    }
+</style>
+
+<script>
+    function togglePassword(inputId) {
+        const input = document.getElementById(inputId);
+        const icon = input.nextElementSibling;
+
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
+
+    // Validation du formulaire
+    document.querySelector('.auth-form').addEventListener('submit', function (e) {
+        const password = document.getElementById('password');
+        const confirmPassword = document.getElementById('confirm_password');
+
+        if (confirmPassword && password.value !== confirmPassword.value) {
+            e.preventDefault();
+            alert('Les mots de passe ne correspondent pas !');
+        }
+    });
+</script>
+{% endblock %}

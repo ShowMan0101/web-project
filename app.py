@@ -1,172 +1,277 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g
-import sqlite3
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
-import os
+from subDB import DBFILENAME, SubscriptionsDB, db_run, db_update
+from functools import wraps
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "votre_clé_secrète"  # À changer en production
-app.config["DATABASE"] = os.path.join(app.instance_path, "database.db")
-
-# Assurez-vous que le dossier instance existe
-try:
-    os.makedirs(app.instance_path)
-except OSError:
-    pass
+app.secret_key = "votre_clé_secrète"  # À changer en production
+db = SubscriptionsDB()
 
 
-def get_db():
-    if "db" not in g:
-        g.db = sqlite3.connect(
-            app.config["DATABASE"], detect_types=sqlite3.PARSE_DECLTYPES
-        )
-        g.db.row_factory = sqlite3.Row
-    return g.db
-
-
-def close_db(e=None):
-    db = g.pop("db", None)
-    if db is not None:
-        db.close()
-
-
-def init_db():
-    db = get_db()
-    with app.open_resource("schema.sql") as f:
-        db.executescript(f.read().decode("utf8"))
-
-
-@app.cli.command("init-db")
-def init_db_command():
-    """Commande Flask pour initialiser la base de données."""
-    init_db()
-    print("Base de données initialisée!")
-
-
-# Enregistrement de la fonction de fermeture de la base de données
-app.teardown_appcontext(close_db)
-
-
-# Routes pour la gestion des utilisateurs
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        email = request.form["email"]
-        password = request.form["password"]
-        db = get_db()
-        error = None
-
-        if not email:
-            error = "Email requis."
-        elif not password:
-            error = "Mot de passe requis."
-        elif (
-            db.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
-            is not None
-        ):
-            error = f"L'utilisateur {email} est déjà enregistré."
-
-        if error is None:
-            db.execute(
-                "INSERT INTO users (email, password_hash) VALUES (?, ?)",
-                (email, generate_password_hash(password)),
-            )
-            db.commit()
+# Décorateur pour vérifier si l'utilisateur est connecté
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "user_id" not in session:
+            flash("Veuillez vous connecter pour accéder à cette page.")
             return redirect(url_for("login"))
+        return f(*args, **kwargs)
 
-        flash(error)
-
-    return render_template("register.html")
+    return decorated_function
 
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route('/login', methods=['GET', 'POST'])
 def login():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+
+        user = db.get_user(email)
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id'] = user['id']
+            flash('Connexion réussie!', 'success')
+            return redirect(url_for('dashboard'))
+
+        flash('Email ou mot de passe incorrect', 'error')
+
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+
+        if password != confirm_password:
+            flash('Les mots de passe ne correspondent pas', 'error')
+            return redirect(url_for('register'))
+
+        if db.get_user(email):
+            flash('Cet email est déjà utilisé', 'error')
+            return redirect(url_for('register'))
+
+        db.create_user(email, generate_password_hash(password))
+        flash('Inscription réussie! Vous pouvez maintenant vous connecter', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
+
+@app.route("/forgot_password", methods=["GET", "POST"])
+def forgot_password():
     if request.method == "POST":
         email = request.form["email"]
-        password = request.form["password"]
-        db = get_db()
-        error = None
-        user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        user = db.get_user(email)
+        if user:
+            # Ici vous devriez générer un token et envoyer un email
+            flash(
+                "Un email de réinitialisation a été envoyé si cet email existe dans notre système.",
+                "info",
+            )
+        return redirect(url_for("forgot_password"))
 
-        if user is None:
-            error = "Email incorrect."
-        elif not check_password_hash(user["password_hash"], password):
-            error = "Mot de passe incorrect."
-
-        if error is None:
-            session.clear()
-            session["user_id"] = user["id"]
-            return redirect(url_for("dashboard"))
-
-        flash(error)
-
-    return render_template("login.html")
+    return render_template("forgot_password.html")
 
 
-# Routes pour la gestion des abonnements
-@app.route("/subscriptions", methods=["GET"])
-def get_subscriptions():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
-
-    db = get_db()
-    subscriptions = db.execute(
-        "SELECT * FROM subscriptions WHERE user_id = ?", (session["user_id"],)
-    ).fetchall()
-    return render_template("subscriptions.html", subscriptions=subscriptions)
+@app.route("/profile")
+@login_required
+def profile():
+    user = db.get_user_by_id(session["user_id"])
+    return render_template("profile.html", user=user)
 
 
-@app.route("/add_subscription", methods=["POST"])
-def add_subscription():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
+@app.route("/update_profile", methods=["POST"])
+@login_required
+def update_profile():
+    user_id = session["user_id"]
+    firstname = request.form.get("firstname")
+    lastname = request.form.get("lastname")
 
-    service_name = request.form["service_name"]
-    category = request.form["category"]
-    start_date = request.form["start_date"]
-    renewal_date = request.form["renewal_date"]
-
-    db = get_db()
-    db.execute(
-        """INSERT INTO subscriptions
-           (user_id, service_name, category, start_date, renewal_date)
-           VALUES (?, ?, ?, ?, ?)""",
-        (session["user_id"], service_name, category, start_date, renewal_date),
+    db_update(
+        "UPDATE users SET firstname = ?, lastname = ? WHERE id = ?",
+        (firstname, lastname, user_id),
+        db_name=DBFILENAME,
     )
-    db.commit()
-    return redirect(url_for("get_subscriptions"))
+    flash("Profil mis à jour avec succès!", "success")
+    return redirect(url_for("profile"))
 
 
-# Route pour le tableau de bord
+@app.route("/change_password", methods=["POST"])
+@login_required
+def change_password():
+    user_id = session["user_id"]
+    current_password = request.form.get("current_password")
+    new_password = request.form.get("new_password")
+    confirm_password = request.form.get("confirm_password")
+
+    user = db.get_user_by_id(user_id)
+
+    if not check_password_hash(user["password_hash"], current_password):
+        flash("Mot de passe actuel incorrect", "error")
+        return redirect(url_for("profile"))
+
+    if new_password != confirm_password:
+        flash("Les nouveaux mots de passe ne correspondent pas", "error")
+        return redirect(url_for("profile"))
+
+    db_update(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (generate_password_hash(new_password), user_id),
+        db_name=DBFILENAME,
+    )
+    flash("Mot de passe changé avec succès!", "success")
+    return redirect(url_for("profile"))
+
+
+@app.route("/update_notifications", methods=["POST"])
+@login_required
+def update_notifications():
+    user_id = session["user_id"]
+    email_notifications = "email_notifications" in request.form
+    renewal_reminders = "renewal_reminders" in request.form
+
+    db_update(
+        "UPDATE users SET email_notifications = ?, renewal_reminders = ? WHERE id = ?",
+        (email_notifications, renewal_reminders, user_id),
+        db_name=DBFILENAME,
+    )
+    flash("Préférences de notification mises à jour!", "success")
+    return redirect(url_for("profile"))
+
+
+@app.route("/delete_account", methods=["POST"])
+@login_required
+def delete_account():
+    user_id = session["user_id"]
+
+    # Supprimer d'abord les abonnements et newsletters
+    db_run(
+        "DELETE FROM subscriptions WHERE user_id = ?", (user_id,), db_name=DBFILENAME
+    )
+    db_run("DELETE FROM newsletters WHERE user_id = ?", (user_id,), db_name=DBFILENAME)
+
+    # Puis supprimer l'utilisateur
+    db_run("DELETE FROM users WHERE id = ?", (user_id,), db_name=DBFILENAME)
+
+    session.clear()
+    flash("Votre compte a été supprimé avec succès.", "success")
+    return redirect(url_for("index"))
+
+
 @app.route("/dashboard")
+@login_required
 def dashboard():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
+    user_id = session["user_id"]
 
-    db = get_db()
-    user = db.execute(
-        "SELECT * FROM users WHERE id = ?", (session["user_id"],)
-    ).fetchone()
+    # Récupérer l'utilisateur
+    user = db.get_user_by_id(user_id)
 
-    subscriptions = db.execute(
-        "SELECT * FROM subscriptions WHERE user_id = ?", (session["user_id"],)
-    ).fetchall()
+    # Récupérer les statistiques
+    stats = db.get_subscription_stats(user_id)
 
-    newsletters = db.execute(
-        "SELECT * FROM newsletters WHERE user_id = ?", (session["user_id"],)
-    ).fetchall()
+    # Calculer les tendances
+    subscription_trend = (
+        ((stats["trend_count"] - stats["active_count"]) / stats["active_count"] * 100)
+        if stats["active_count"] > 0
+        else 0
+    )
+
+    cost_trend = (
+        ((stats["trend_cost"] - stats["total_cost"]) / stats["total_cost"] * 100)
+        if stats["total_cost"] > 0
+        else 0
+    )
+
+    # Récupérer les autres données
+    upcoming_renewals = db.get_upcoming_renewals(user_id)
+    newsletters = db.list_newsletters(user_id)
+    recent_activities = db.get_recent_activities(user_id)
 
     return render_template(
         "dashboard.html",
         user=user,
-        subscriptions=subscriptions,
+        active_subscriptions=stats["active_count"],
+        total_monthly_cost=stats["total_cost"],
+        subscription_trend=subscription_trend,
+        cost_trend=cost_trend,
+        upcoming_renewals=upcoming_renewals,
         newsletters=newsletters,
+        total_emails=len(newsletters),
+        recent_activities=recent_activities,
     )
+
+
+@app.route("/subscriptions")
+@login_required
+def subscriptions():
+    user_subscriptions = db.list_subscriptions(session["user_id"])
+    total_cost = sum(sub["monthly_cost"] for sub in user_subscriptions)
+    upcoming_renewals = len(
+        [s for s in user_subscriptions if is_upcoming_renewal(s["renewal_date"])]
+    )
+    categories = list(set(sub["category"] for sub in user_subscriptions))
+
+    return render_template(
+        "subscriptions.html",
+        subscriptions=user_subscriptions,
+        total_cost=total_cost,
+        upcoming_renewals=upcoming_renewals,
+        categories=categories,
+    )
+
+
+@app.route("/subscription/add", methods=["GET", "POST"])
+@login_required
+def add_subscription():
+    if request.method == "POST":
+        db.create_subscription(
+            user_id=session["user_id"],
+            service_name=request.form["service_name"],
+            category=request.form["category"],
+            start_date=request.form["start_date"],
+            renewal_date=request.form["renewal_date"],
+            monthly_cost=float(request.form["monthly_cost"]),
+        )
+        flash("Abonnement ajouté avec succès!")
+        return redirect(url_for("subscriptions"))
+
+    return render_template("add_subscription.html")
+
+
+@app.route("/subscription/delete/<int:id>", methods=["POST"])
+@login_required
+def delete_subscription(id):
+    if db.delete_subscription(id):
+        flash("Abonnement supprimé avec succès!")
+    else:
+        flash("Erreur lors de la suppression.")
+    return redirect(url_for("subscriptions"))
+
+
+@app.route("/settings")
+@login_required
+def settings():
+    user = db.get_user_by_id(session["user_id"])
+    return render_template("settings.html", user=user)
 
 
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    flash("Vous avez été déconnecté.")
+    return redirect(url_for("index"))
+
+
+def is_upcoming_renewal(renewal_date):
+    from datetime import datetime, timedelta
+
+    renewal = datetime.strptime(renewal_date, "%Y-%m-%d")
+    return datetime.now() <= renewal <= datetime.now() + timedelta(days=7)
 
 
 if __name__ == "__main__":

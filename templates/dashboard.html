@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de bord - SubManager{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+    <!-- En-tête avec salutation -->
+    <div class="dashboard-welcome">
+        <div class="welcome-text">
+            <h1>Bonjour {{ user.firstname if user.firstname else 'utilisateur' }} 👋</h1>
+            <p>Voici un aperçu de vos abonnements</p>
+        </div>
+        <div class="welcome-actions">
+            <button class="btn btn-primary" onclick="window.location.href='{{ url_for('add_subscription') }}'">
+                <i class="fas fa-plus"></i>
+                Ajouter un abonnement
+            </button>
+            <button class="btn btn-secondary" id="scanEmailsBtn">
+                <i class="fas fa-sync"></i>
+                Scanner mes emails
+            </button>
+        </div>
+    </div>
+
+    <!-- Cartes de statistiques -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #3498db;">
+                <i class="fas fa-receipt"></i>
+            </div>
+            <div class="stat-info">
+                <h3>Abonnements actifs</h3>
+                <p class="stat-number">{{ active_subscriptions|length }}</p>
+                <p class="stat-trend">
+                    {% if subscription_trend > 0 %}
+                    <i class="fas fa-arrow-up trend-up"></i>
+                    <span>+{{ subscription_trend }}% ce mois</span>
+                    {% else %}
+                    <i class="fas fa-arrow-down trend-down"></i>
+                    <span>{{ subscription_trend }}% ce mois</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #2ecc71;">
+                <i class="fas fa-euro-sign"></i>
+            </div>
+            <div class="stat-info">
+                <h3>Dépenses mensuelles</h3>
+                <p class="stat-number">{{ "%.2f"|format(total_monthly_cost) }}€</p>
+                <p class="stat-trend">
+                    {% if cost_trend > 0 %}
+                    <i class="fas fa-arrow-up trend-up"></i>
+                    <span>+{{ cost_trend }}% vs dernier mois</span>
+                    {% else %}
+                    <i class="fas fa-arrow-down trend-down"></i>
+                    <span>{{ cost_trend }}% vs dernier mois</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #e74c3c;">
+                <i class="fas fa-calendar-alt"></i>
+            </div>
+            <div class="stat-info">
+                <h3>Renouvellements proches</h3>
+                <p class="stat-number">{{ upcoming_renewals|length }}</p>
+                <p class="stat-text">Dans les 7 prochains jours</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon" style="background: #9b59b6;">
+                <i class="fas fa-envelope"></i>
+            </div>
+            <div class="stat-info">
+                <h3>Newsletters actives</h3>
+                <p class="stat-number">{{ newsletters|length }}</p>
+                <p class="stat-text">Sur {{ total_emails }} emails analysés</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphique des dépenses -->
+    <div class="dashboard-row">
+        <div class="chart-card">
+            <div class="card-header">
+                <h2>Évolution des dépenses</h2>
+                <select id="chartPeriod" class="period-select">
+                    <option value="week">Cette semaine</option>
+                    <option value="month" selected>Ce mois</option>
+                    <option value="year">Cette année</option>
+                </select>
+            </div>
+            <canvas id="expensesChart"></canvas>
+        </div>
+
+        <!-- Répartition par catégorie -->
+        <div class="chart-card">
+            <div class="card-header">
+                <h2>Répartition par catégorie</h2>
+            </div>
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Prochains renouvellements -->
+    <div class="dashboard-row">
+        <div class="renewals-card">
+            <div class="card-header">
+                <h2>Prochains renouvellements</h2>
+                <a href="{{ url_for('subscriptions') }}" class="btn btn-text">Voir tout</a>
+            </div>
+            <div class="renewals-list">
+                {% for renewal in upcoming_renewals %}
+                <div class="renewal-item">
+                    <div class="renewal-info">
+                        <h3>{{ renewal.service_name }}</h3>
+                        <p>{{ renewal.renewal_date }}</p>
+                    </div>
+                    <div class="renewal-cost">
+                        <span>{{ "%.2f"|format(renewal.monthly_cost) }}€</span>
+                        <button class="btn btn-outline" onclick="renewSubscription({{ renewal.id }})">
+                            Renouveler
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Activité récente -->
+        <div class="activity-card">
+            <div class="card-header">
+                <h2>Activité récente</h2>
+            </div>
+            <div class="activity-list">
+                {% for activity in recent_activities %}
+                <div class="activity-item">
+                    <div class="activity-icon">
+                        {% if activity.type == 'add' %}
+                        <i class="fas fa-plus-circle"></i>
+                        {% elif activity.type == 'delete' %}
+                        <i class="fas fa-minus-circle"></i>
+                        {% elif activity.type == 'update' %}
+                        <i class="fas fa-edit"></i>
+                        {% endif %}
+                    </div>
+                    <div class="activity-info">
+                        <p>{{ activity.description }}</p>
+                        <span>{{ activity.date }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dashboard-page {
+        padding: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    .dashboard-welcome {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+    .welcome-text h1 {
+        font-size: 28px;
+        color: var(--dark-color);
+        margin-bottom: 5px;
+    }
+
+    .welcome-text p {
+        color: var(--gray-color);
+    }
+
+    .welcome-actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .stat-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .stat-icon i {
+        font-size: 24px;
+        color: white;
+    }
+
+    .stat-info h3 {
+        color: var(--gray-color);
+        font-size: 14px;
+        margin-bottom: 5px;
+    }
+
+    .stat-number {
+        font-size: 24px;
+        font-weight: bold;
+        color: var(--dark-color);
+        margin-bottom: 5px;
+    }
+
+    .stat-trend {
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .trend-up {
+        color: #2ecc71;
+    }
+
+    .trend-down {
+        color: #e74c3c;
+    }
+
+    .dashboard-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .chart-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .card-header h2 {
+        font-size: 18px;
+        color: var(--dark-color);
+    }
+
+    .period-select {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        background: white;
+    }
+
+    .renewals-card,
+    .activity-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .renewal-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .renewal-info h3 {
+        font-size: 16px;
+        color: var(--dark-color);
+        margin-bottom: 5px;
+    }
+
+    .renewal-info p {
+        font-size: 14px;
+        color: var(--gray-color);
+    }
+
+    .renewal-cost {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .renewal-cost span {
+        font-weight: bold;
+        color: var(--dark-color);
+    }
+
+    .activity-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .activity-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #f8f9fa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .activity-icon i {
+        font-size: 18px;
+        color: var(--primary-color);
+    }
+
+    .activity-info p {
+        color: var(--dark-color);
+        margin-bottom: 5px;
+    }
+
+    .activity-info span {
+        font-size: 12px;
+        color: var(--gray-color);
+    }
+
+    @media (max-width: 992px) {
+        .dashboard-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .dashboard-welcome {
+            flex-direction: column;
+            text-align: center;
+            gap: 20px;
+        }
+
+        .welcome-actions {
+            width: 100%;
+            flex-direction: column;
+        }
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Configuration des graphiques
+    document.addEventListener('DOMContentLoaded', function () {
+        // Graphique des dépenses
+        const expensesCtx = document.getElementById('expensesChart').getContext('2d');
+        new Chart(expensesCtx, {
+            type: 'line',
+            data: {
+                labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'],
+                datasets: [{
+                    label: 'Dépenses mensuelles',
+                    data: [65, 59, 80, 81, 56, 55],
+                    borderColor: '#3498db',
+                    tension: 0.4,
+                    fill: true,
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Graphique des catégories
+        const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+        new Chart(categoryCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Streaming', 'Musique', 'Gaming', 'Cloud', 'Autre'],
+                datasets: [{
+                    data: [30, 20, 15, 25, 10],
+                    backgroundColor: [
+                        '#3498db',
+                        '#2ecc71',
+                        '#e74c3c',
+                        '#9b59b6',
+                        '#f1c40f'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    });
+
+    // Fonction pour scanner les emails
+    document.getElementById('scanEmailsBtn').addEventListener('click', function () {
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scan en cours...';
+
+        fetch('/scan-emails', {
+            method: 'POST'
+        })
+            .then(response => response.json())
+            .then(data => {
+                alert('Scan terminé ! ' + data.message);
+                window.location.reload();
+            })
+            .catch(error => {
+                alert('Erreur lors du scan : ' + error);
+            })
+            .finally(() => {
+                this.disabled = false;
+                this.innerHTML = '<i class="fas fa-sync"></i> Scanner mes emails';
+            });
+    });
+
+    // Fonction pour renouveler un abonnement
+    function renewSubscription(id) {
+        if (confirm('Voulez-vous renouveler cet abonnement ?')) {
+            fetch(`/subscription/renew/${id}`, {
+                method: 'POST'
+            })
+                .then(response => {
+                    if (response.ok) {
+                        window.location.reload();
+                    }
+                });
+        }
+    }
+</script>
+{% endblock %}

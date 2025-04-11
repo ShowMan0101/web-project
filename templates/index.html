@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+
+{% block title %}SubManager - Gérez vos abonnements simplement{% endblock %}
+
+{% block content %}
+<div class="landing-page">
+    <!-- Section Hero -->
+    <section class="hero-section">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                Gérez tous vos abonnements
+                <span class="highlight">en un seul endroit</span>
+            </h1>
+            <p class="hero-subtitle">
+                Ne perdez plus le contrôle de vos abonnements numériques.
+                SubManager vous aide à suivre, gérer et optimiser vos dépenses d'abonnements.
+            </p>
+            <div class="hero-buttons">
+                {% if not session.user_id %}
+                <a href="{{ url_for('register') }}" class="btn btn-primary">
+                    <i class="fas fa-user-plus"></i>
+                    Commencer gratuitement
+                </a>
+                <a href="{{ url_for('login') }}" class="btn btn-outline">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Se connecter
+                </a>
+                {% else %}
+                <a href="{{ url_for('dashboard') }}" class="btn btn-primary">
+                    <i class="fas fa-tachometer-alt"></i>
+                    Accéder au tableau de bord
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        <div class="hero-image">
+            <img src="{{ url_for('static', filename='images/hero-illustration.svg') }}" alt="Illustration">
+        </div>
+    </section>
+
+    <!-- Section Fonctionnalités -->
+    <section class="features-section">
+        <h2 class="section-title">Pourquoi choisir SubManager ?</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-search"></i>
+                </div>
+                <h3>Détection Automatique</h3>
+                <p>Scannez automatiquement vos emails pour détecter tous vos abonnements actifs.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-chart-pie"></i>
+                </div>
+                <h3>Suivi des Dépenses</h3>
+                <p>Visualisez et analysez vos dépenses mensuelles en abonnements.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-bell"></i>
+                </div>
+                <h3>Rappels Intelligents</h3>
+                <p>Recevez des notifications avant chaque renouvellement d'abonnement.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <h3>Sécurité Garantie</h3>
+                <p>Vos données sont cryptées et sécurisées selon les plus hauts standards.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section Comment ça marche -->
+    <section class="how-it-works-section">
+        <h2 class="section-title">Comment ça marche ?</h2>
+        <div class="steps-container">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3>Inscrivez-vous</h3>
+                <p>Créez votre compte gratuitement en quelques secondes.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3>Connectez vos emails</h3>
+                <p>Autorisez l'analyse de vos emails pour détecter vos abonnements.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3>Gérez vos abonnements</h3>
+                <p>Visualisez et optimisez tous vos abonnements depuis votre tableau de bord.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section Témoignages -->
+    <section class="testimonials-section">
+        <h2 class="section-title">Ce que disent nos utilisateurs</h2>
+        <div class="testimonials-grid">
+            <div class="testimonial-card">
+                <div class="testimonial-content">
+                    <i class="fas fa-quote-left"></i>
+                    <p>"Grâce à SubManager, j'ai découvert que je payais pour des services que je n'utilisais plus. J'ai
+                        économisé plus de 50€ par mois !"</p>
+                </div>
+                <div class="testimonial-author">
+                    <img src="{{ url_for('static', filename='images/avatar1.jpg') }}" alt="Sophie M.">
+                    <div>
+                        <h4>Sophie M.</h4>
+                        <p>Utilisatrice depuis 6 mois</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Ajoutez d'autres témoignages similaires -->
+        </div>
+    </section>
+
+    <!-- Section CTA -->
+    <section class="cta-section">
+        <div class="cta-content">
+            <h2>Prêt à reprendre le contrôle de vos abonnements ?</h2>
+            <p>Rejoignez des milliers d'utilisateurs qui font déjà des économies.</p>
+            <a href="{{ url_for('register') }}" class="btn btn-primary">
+                <i class="fas fa-rocket"></i>
+                Commencer maintenant
+            </a>
+        </div>
+    </section>
+</div>
+
+<style>
+    .landing-page {
+        overflow-x: hidden;
+    }
+
+    /* Hero Section */
+    .hero-section {
+        padding: 80px 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        align-items: center;
+    }
+
+    .hero-title {
+        font-size: 48px;
+        line-height: 1.2;
+        margin-bottom: 20px;
+        color: var(--dark-color);
+    }
+
+    .hero-title .highlight {
+        color: var(--primary-color);
+        display: block;
+    }
+
+    .hero-subtitle {
+        font-size: 18px;
+        color: var(--gray-color);
+        margin-bottom: 30px;
+    }
+
+    .hero-buttons {
+        display: flex;
+        gap: 20px;
+    }
+
+    .hero-image img {
+        width: 100%;
+        height: auto;
+        animation: float 6s ease-in-out infinite;
+    }
+
+    /* Features Section */
+    .features-section {
+        padding: 80px 20px;
+        background: white;
+    }
+
+    .section-title {
+        text-align: center;
+        font-size: 36px;
+        margin-bottom: 50px;
+        color: var(--dark-color);
+    }
+
+    .features-grid {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 30px;
+    }
+
+    .feature-card {
+        padding: 30px;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+    }
+
+    .feature-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .feature-icon {
+        width: 60px;
+        height: 60px;
+        background: var(--primary-color);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+    }
+
+    .feature-icon i {
+        font-size: 24px;
+        color: white;
+    }
+
+    .feature-card h3 {
+        margin-bottom: 15px;
+        color: var(--dark-color);
+    }
+
+    .feature-card p {
+        color: var(--gray-color);
+    }
+
+    /* How it Works Section */
+    .how-it-works-section {
+        padding: 80px 20px;
+        background: var(--light-color);
+    }
+
+    .steps-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-around;
+        gap: 30px;
+    }
+
+    .step {
+        text-align: center;
+        flex: 1;
+    }
+
+    .step-number {
+        width: 40px;
+        height: 40px;
+        background: var(--primary-color);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+        font-weight: bold;
+    }
+
+    /* Testimonials Section */
+    .testimonials-section {
+        padding: 80px 20px;
+        background: white;
+    }
+
+    .testimonials-grid {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 30px;
+    }
+
+    .testimonial-card {
+        padding: 30px;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .testimonial-content {
+        margin-bottom: 20px;
+    }
+
+    .testimonial-content i {
+        color: var(--primary-color);
+        font-size: 24px;
+        margin-bottom: 10px;
+    }
+
+    .testimonial-author {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .testimonial-author img {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    /* CTA Section */
+    .cta-section {
+        padding: 80px 20px;
+        background: linear-gradient(135deg, var(--primary-color) 0%, #2980b9 100%);
+        color: white;
+        text-align: center;
+    }
+
+    .cta-content {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .cta-content h2 {
+        font-size: 36px;
+        margin-bottom: 20px;
+    }
+
+    .cta-content p {
+        margin-bottom: 30px;
+        font-size: 18px;
+    }
+
+    /* Animations */
+    @keyframes float {
+        0% {
+            transform: translateY(0px);
+        }
+
+        50% {
+            transform: translateY(-20px);
+        }
+
+        100% {
+            transform: translateY(0px);
+        }
+    }
+
+    /* Responsive Design */
+    @media (max-width: 992px) {
+        .hero-section {
+            grid-template-columns: 1fr;
+            text-align: center;
+        }
+
+        .hero-buttons {
+            justify-content: center;
+        }
+
+        .steps-container {
+            flex-direction: column;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .hero-title {
+            font-size: 36px;
+        }
+
+        .features-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
