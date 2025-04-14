@@ -1,8 +1,11 @@
+import secrets
+import secrets
 import sqlite3
 import json
 from datetime import datetime, timedelta
 
 DBFILENAME = "subscriptions.sqlite"
+
 
 def db_fetch(query, args=(), all=False, db_name=DBFILENAME):
     with sqlite3.connect(db_name) as conn:
@@ -18,22 +21,26 @@ def db_fetch(query, args=(), all=False, db_name=DBFILENAME):
                 res = dict(res)
     return res
 
+
 def db_insert(query, args=(), db_name=DBFILENAME):
     with sqlite3.connect(db_name) as conn:
         cur = conn.execute(query, args)
         conn.commit()
         return cur.lastrowid
 
+
 def db_run(query, args=(), db_name=DBFILENAME):
     with sqlite3.connect(db_name) as conn:
         cur = conn.execute(query, args)
         conn.commit()
+
 
 def db_update(query, args=(), db_name=DBFILENAME):
     with sqlite3.connect(db_name) as conn:
         cur = conn.execute(query, args)
         conn.commit()
         return cur.rowcount
+
 
 class SubscriptionsDB:
     def __init__(self, db_path=None, json_path=None):
@@ -53,7 +60,8 @@ class SubscriptionsDB:
                 renewal_reminders BOOLEAN DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-            """, db_name=self.db_path
+            """,
+            db_name=self.db_path,
         )
 
         db_run(
@@ -61,6 +69,7 @@ class SubscriptionsDB:
             CREATE TABLE IF NOT EXISTS subscriptions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
+                email text not null,
                 service_name TEXT NOT NULL,
                 category TEXT,
                 status TEXT DEFAULT 'active',
@@ -70,7 +79,8 @@ class SubscriptionsDB:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
-            """, db_name=self.db_path
+            """,
+            db_name=self.db_path,
         )
 
         db_run(
@@ -82,7 +92,69 @@ class SubscriptionsDB:
                 subscription_date DATE DEFAULT CURRENT_DATE,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
-            """, db_name=self.db_path
+            """,
+            db_name=self.db_path,
+        )
+
+        db_run(
+            """
+            CREATE TABLE IF NOT EXISTS emails (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """,
+            db_name=self.db_path,
+        )
+
+        db_run(
+            """
+            CREATE TABLE IF NOT EXISTS reset_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token TEXT UNIQUE NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """,
+    db_name=self.db_path,
+)
+
+    # email
+    def get_emails(self, user_id):
+        query = "SELECT email, created_at FROM emails WHERE user_id = ? ORDER BY created_at DESC"
+        return db_fetch(query, (user_id,), all=True, db_name=self.db_path) or []
+
+    def save_email(self, user_id, email_address):
+        # Vérifie si elle est déjà enregistrée
+        exists = db_fetch(
+            "SELECT id FROM emails WHERE user_id = ? AND email = ?",
+            (user_id, email_address),
+            db_name=self.db_path,
+        )
+        if not exists:
+            db_insert(
+                "INSERT INTO emails (user_id, email) VALUES (?, ?)",
+                (user_id, email_address),
+                db_name=self.db_path,
+            )
+
+    def list_subscriptions_by_email(self, user_id, email_address):
+        """
+        Récupère tous les abonnements liés à une adresse email enregistrée.
+        """
+        query = """
+        SELECT s.*
+        FROM subscriptions s
+        JOIN emails e ON e.user_id = s.user_id
+        WHERE s.user_id = ? AND e.email = ?
+        ORDER BY s.start_date DESC
+        """
+        return (
+            db_fetch(query, (user_id, email_address), all=True, db_name=self.db_path)
+            or []
         )
 
     # Users
@@ -90,48 +162,85 @@ class SubscriptionsDB:
         return db_insert(
             "INSERT INTO users (email, password_hash) VALUES (?, ?)",
             (email, password_hash),
-            db_name=self.db_path
+            db_name=self.db_path,
         )
 
     def get_user(self, email):
-        return db_fetch("SELECT * FROM users WHERE email = ?", (email,), db_name=self.db_path)
+        return db_fetch(
+            "SELECT * FROM users WHERE email = ?", (email,), db_name=self.db_path
+        )
 
     def get_user_by_id(self, user_id):
-        return db_fetch("SELECT * FROM users WHERE id = ?", (user_id,), db_name=self.db_path)
+        return db_fetch(
+            "SELECT * FROM users WHERE id = ?", (user_id,), db_name=self.db_path
+        )
 
     # Subscriptions
     def list_subscriptions(self, user_id):
-        return db_fetch(
-            "SELECT * FROM subscriptions WHERE user_id = ? ORDER BY renewal_date",
-            (user_id,), all=True, db_name=self.db_path
-        ) or []
-
-    def create_subscription(self, user_id, service_name, category, start_date, renewal_date, monthly_cost):
-        return db_insert(
-            """
-            INSERT INTO subscriptions (user_id, service_name, category, start_date, renewal_date, monthly_cost)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (user_id, service_name, category, start_date, renewal_date, monthly_cost),
-            db_name=self.db_path
+        return (
+            db_fetch(
+                "SELECT * FROM subscriptions WHERE user_id = ? ORDER BY renewal_date",
+                (user_id,),
+                all=True,
+                db_name=self.db_path,
+            )
+            or []
         )
 
-    def update_subscription(self, id, service_name, category, start_date, renewal_date, monthly_cost):
-        return db_update(
-            """
+    def create_subscription(
+        self,
+        user_id,
+        service_name,
+        category,
+        start_date,
+        renewal_date,
+        monthly_cost,
+        email=None,
+    ):
+        query = """
+        INSERT INTO subscriptions
+        (user_id, email, service_name, category, start_date, renewal_date, monthly_cost)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """
+        args = (
+            user_id,
+            service_name,
+            category,
+            start_date,
+            renewal_date,
+            monthly_cost,
+            email,
+        )
+        return db_insert(query, args, db_name=self.db_path)
+
+    def update_subscription(
+        self, id, service_name, category, start_date, renewal_date, monthly_cost
+    ):
+        return (
+            db_update(
+                """
             UPDATE subscriptions
             SET service_name = ?, category = ?, start_date = ?, renewal_date = ?, monthly_cost = ?
             WHERE id = ?
             """,
-            (service_name, category, start_date, renewal_date, monthly_cost, id),
-            db_name=self.db_path
-        ) > 0
+                (service_name, category, start_date, renewal_date, monthly_cost, id),
+                db_name=self.db_path,
+            )
+            > 0
+        )
 
     def delete_subscription(self, id):
-        return db_update("DELETE FROM subscriptions WHERE id = ?", (id,), db_name=self.db_path) > 0
+        return (
+            db_update(
+                "DELETE FROM subscriptions WHERE id = ?", (id,), db_name=self.db_path
+            )
+            > 0
+        )
 
     def get_subscription(self, id):
-        return db_fetch("SELECT * FROM subscriptions WHERE id = ?", (id,), db_name=self.db_path)
+        return db_fetch(
+            "SELECT * FROM subscriptions WHERE id = ?", (id,), db_name=self.db_path
+        )
 
     def get_subscription_stats(self, user_id):
         active_query = """
@@ -156,39 +265,87 @@ class SubscriptionsDB:
 
     def get_upcoming_renewals(self, user_id, days=7):
         target_date = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
-        return db_fetch(
-            """
+        return (
+            db_fetch(
+                """
             SELECT * FROM subscriptions
             WHERE user_id = ? AND status = 'active' AND renewal_date <= ?
             ORDER BY renewal_date
             """,
-            (user_id, target_date),
-            all=True, db_name=self.db_path
-        ) or []
+                (user_id, target_date),
+                all=True,
+                db_name=self.db_path,
+            )
+            or []
+        )
 
     # Newsletters
     def list_newsletters(self, user_id):
-        return db_fetch(
-            "SELECT * FROM newsletters WHERE user_id = ?",
-            (user_id,), all=True, db_name=self.db_path
-        ) or []
+        return (
+            db_fetch(
+                "SELECT * FROM newsletters WHERE user_id = ?",
+                (user_id,),
+                all=True,
+                db_name=self.db_path,
+            )
+            or []
+        )
 
     def add_newsletter(self, user_id, newsletter_name):
         return db_insert(
             "INSERT INTO newsletters (user_id, newsletter_name) VALUES (?, ?)",
-            (user_id, newsletter_name), db_name=self.db_path
+            (user_id, newsletter_name),
+            db_name=self.db_path,
         )
 
     def delete_newsletter(self, id):
-        return db_update("DELETE FROM newsletters WHERE id = ?", (id,), db_name=self.db_path) > 0
+        return (
+            db_update(
+                "DELETE FROM newsletters WHERE id = ?", (id,), db_name=self.db_path
+            )
+            > 0
+        )
+
+
+
+
+
+    # Génère un token unique et l’enregistre
+    def create_reset_token(self, user_id):
+        token = secrets.token_urlsafe(32)
+        expires_at = (datetime.now() + timedelta(hours=1)).isoformat()
+        db_insert(
+            "INSERT INTO reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+            (user_id, token, expires_at),
+            db_name=self.db_path
+        )
+        return token
+
+    # Récupère un utilisateur valide via un token
+    def get_user_by_token(self, token):
+        query = """
+            SELECT u.* FROM users u
+            JOIN reset_tokens r ON r.user_id = u.id
+            WHERE r.token = ? AND r.expires_at > CURRENT_TIMESTAMP
+        """
+        return db_fetch(query, (token,), db_name=self.db_path)
+
+    # Supprime le token après usage
+    def invalidate_token(self, token):
+        db_run("DELETE FROM reset_tokens WHERE token = ?", (token,), db_name=self.db_path)
+
 
     # Export / import
     def save(self, json_path=None):
         json_path = json_path or self.json_path
         data = {
             "users": db_fetch("SELECT * FROM users", all=True, db_name=self.db_path),
-            "subscriptions": db_fetch("SELECT * FROM subscriptions", all=True, db_name=self.db_path),
-            "newsletters": db_fetch("SELECT * FROM newsletters", all=True, db_name=self.db_path),
+            "subscriptions": db_fetch(
+                "SELECT * FROM subscriptions", all=True, db_name=self.db_path
+            ),
+            "newsletters": db_fetch(
+                "SELECT * FROM newsletters", all=True, db_name=self.db_path
+            ),
         }
         try:
             with open(json_path, "w", encoding="utf-8") as fh:
@@ -204,22 +361,34 @@ class SubscriptionsDB:
             with open(json_path, "r") as fh:
                 data = json.load(fh)
             for user in data.get("users", []):
-                db_insert("INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)",
-                          (user["id"], user["email"], user["password_hash"]),
-                          db_name=self.db_path)
+                db_insert(
+                    "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)",
+                    (user["id"], user["email"], user["password_hash"]),
+                    db_name=self.db_path,
+                )
             for sub in data.get("subscriptions", []):
                 db_insert(
                     """INSERT INTO subscriptions
                     (id, user_id, service_name, category, status, start_date, renewal_date, monthly_cost)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (sub["id"], sub["user_id"], sub["service_name"], sub["category"],
-                     sub["status"], sub["start_date"], sub["renewal_date"], sub["monthly_cost"]),
-                    db_name=self.db_path
+                    (
+                        sub["id"],
+                        sub["user_id"],
+                        sub["service_name"],
+                        sub["category"],
+                        sub["status"],
+                        sub["start_date"],
+                        sub["renewal_date"],
+                        sub["monthly_cost"],
+                    ),
+                    db_name=self.db_path,
                 )
             for news in data.get("newsletters", []):
-                db_insert("INSERT INTO newsletters (id, user_id, newsletter_name) VALUES (?, ?, ?)",
-                          (news["id"], news["user_id"], news["newsletter_name"]),
-                          db_name=self.db_path)
+                db_insert(
+                    "INSERT INTO newsletters (id, user_id, newsletter_name) VALUES (?, ?, ?)",
+                    (news["id"], news["user_id"], news["newsletter_name"]),
+                    db_name=self.db_path,
+                )
             return True
         except Exception as e:
             print(f"Erreur lors de l'import JSON : {e}")

@@ -1,8 +1,13 @@
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
-from subDB import DBFILENAME, SubscriptionsDB, db_run, db_update
+from subDB import DBFILENAME, SubscriptionsDB, db_fetch, db_run, db_update
 from functools import wraps
+import smtplib
+from email.mime.text import MIMEText
+
+SMTP_EMAIL = "test@gmail.com"
+SMTP_PASSWORD = "mnnq gwbi lqsb bbqz"
 
 app = Flask(__name__)
 app.secret_key = "secret key"  # À changer en production
@@ -75,15 +80,76 @@ def forgot_password():
     if request.method == "POST":
         email = request.form["email"]
         user = db.get_user(email)
+
         if user:
-            # Ici vous devriez générer un token et envoyer un email
-            flash(
-                "Un email de réinitialisation a été envoyé si cet email existe dans notre système.",
-                "info",
-            )
+            token = db.create_reset_token(user["id"])
+            reset_url = url_for("reset_password", token=token, _external=True)
+            send_reset_email(user["email"], reset_url)  # tu peux utiliser SMTP ici
+
+        flash("Si cet email existe, un lien de réinitialisation a été envoyé.", "info")
         return redirect(url_for("forgot_password"))
 
     return render_template("forgot_password.html")
+
+
+@app.route("/reset_password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    user = db.get_user_by_token(token)
+
+    if not user:
+        flash("Lien expiré ou invalide", "danger")
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        password = request.form.get("password")
+        confirm = request.form.get("confirm_password")
+
+        if password != confirm:
+            flash("Les mots de passe ne correspondent pas", "error")
+            return redirect(request.url)
+
+        db_update(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (generate_password_hash(password), user["id"]),
+            db_name=DBFILENAME,
+        )
+        db.invalidate_token(token)
+        flash(
+            "Mot de passe mis à jour avec succès. Vous pouvez vous connecter.",
+            "success",
+        )
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token=token)
+
+
+def send_reset_email(to_email, reset_url):
+    subject = "Réinitialisation de votre mot de passe SubManager"
+    body = f"""
+Bonjour,
+
+Vous avez demandé à réinitialiser votre mot de passe SubManager.
+
+Cliquez ici pour créer un nouveau mot de passe :
+{reset_url}
+
+Ce lien expirera dans 1 heure.
+Si vous n'avez pas demandé cette opération, ignorez cet email.
+
+– L'équipe SubManager
+    """
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = SMTP_EMAIL
+    msg["To"] = to_email
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.send_message(msg)
+    except Exception as e:
+        print(f"[ERREUR] Envoi email échoué : {e}")
 
 
 @app.route("/profile")
@@ -176,136 +242,208 @@ def delete_account():
 @login_required
 def dashboard():
     user_id = session["user_id"]
+    emails = db.get_emails(user_id)
 
-    # Récupérer l'utilisateur
-    user = db.get_user_by_id(user_id)
+    user_emails = []
+    total_services = 0
 
-    # Récupérer les statistiques
-    stats = db.get_subscription_stats(user_id)
+    for email in emails:
+        subscriptions = db.list_subscriptions_by_email(user_id, email["email"])
+        services = [
+            s for s in subscriptions if not s["monthly_cost"] or s["monthly_cost"] == 0
+        ]
+        total_services += len(services)
 
-    # Calculer les tendances
-    subscription_trend = (
-        ((stats["trend_count"] - stats["active_count"]) / stats["active_count"] * 100)
-        if stats["active_count"] > 0
-        else 0
-    )
-
-    cost_trend = (
-        ((stats["trend_cost"] - stats["total_cost"]) / stats["total_cost"] * 100)
-        if stats["total_cost"] > 0
-        else 0
-    )
-
-    # Récupérer les autres données
-    upcoming_renewals = db.get_upcoming_renewals(user_id)
-    newsletters = db.list_newsletters(user_id)
-    recent_activities = db.get_recent_activities(user_id)
+        user_emails.append(
+            {
+                "email": email["email"],
+                "added_at": email["created_at"],
+                "services": services,
+            }
+        )
 
     return render_template(
         "dashboard.html",
-        user=user,
-        active_subscriptions=stats["active_count"],
-        total_monthly_cost=stats["total_cost"],
-        subscription_trend=subscription_trend,
-        cost_trend=cost_trend,
-        upcoming_renewals=upcoming_renewals,
-        newsletters=newsletters,
-        total_emails=len(newsletters),
-        recent_activities=recent_activities,
+        user_emails=user_emails,
+        email_count=len(emails),
+        service_count=total_services,
     )
 
 
 @app.route("/subscriptions")
 @login_required
 def subscriptions():
-    user_subscriptions = db.list_subscriptions(session["user_id"])
-    total_cost = sum(sub["monthly_cost"] for sub in user_subscriptions)
-    upcoming_renewals = len(
-        [s for s in user_subscriptions if is_upcoming_renewal(s["renewal_date"])]
-    )
-    categories = list(set(sub["category"] for sub in user_subscriptions))
+    user_id = session["user_id"]
+    search = request.args.get("search", "").lower()
+    sort = request.args.get(
+        "sort", "renewal_date"
+    )  # par défaut tri par date de renouvellement
+    page = int(request.args.get("page", 1))
+    per_page = 10
+
+    # Récupération brute
+    all_subs = db.list_subscriptions(user_id)
+
+    # Filtrage
+    if search:
+        all_subs = [
+            s
+            for s in all_subs
+            if search in s["service_name"].lower()
+            or (s.get("category") and search in s["category"].lower())
+        ]
+
+    # Tri
+    if sort == "cost":
+        all_subs.sort(key=lambda s: s["monthly_cost"] or 0, reverse=True)
+    elif sort == "service":
+        all_subs.sort(key=lambda s: s["service_name"].lower())
+    else:  # renewal_date
+        all_subs.sort(key=lambda s: s["renewal_date"] or "")
+
+    # Pagination
+    total = len(all_subs)
+    pages = (total + per_page - 1) // per_page
+    subs = all_subs[(page - 1) * per_page : page * per_page]
 
     return render_template(
         "subscriptions.html",
-        subscriptions=user_subscriptions,
-        total_cost=total_cost,
-        upcoming_renewals=upcoming_renewals,
-        categories=categories,
+        subscriptions=subs,
+        total=total,
+        page=page,
+        pages=pages,
+        search=search,
+        sort=sort,
     )
 
 
 @app.route("/scan-email", methods=["POST"])
 @login_required
 def scan_email():
+    import imaplib, email, re
     from datetime import datetime
-    import imaplib
-    import email
-    import re
+    from email.header import decode_header
 
     email_to_scan = request.form.get("scan_email")
     email_password = request.form.get("scan_password")
+    since_date = request.form.get("scan_since")  # format YYYY-MM-DD
 
-    # Dictionnaire de correspondance domaine → catégorie
+    keywords = [
+        "inscription",
+        "confirmation",
+        "activation",
+        "bienvenue",
+        "account created",
+        "welcome",
+    ]
     domain_to_category = {
         "netflix": "Streaming",
-        "youtube": "Streaming",
         "spotify": "Musique",
         "deezer": "Musique",
-        "playstation": "Gaming",
-        "xbox": "Gaming",
-        "steam": "Gaming",
+        "youtube": "Streaming",
         "dropbox": "Cloud",
-        "google": "Cloud",
-        "icloud": "Cloud",
+        "adobe": "Design",
+        "amazon": "E-commerce",
         "paypal": "Finance",
         "revolut": "Finance",
         "notion": "Productivité",
-        "adobe": "Design",
-        "amazon": "E-commerce",
+        "steam": "Gaming",
+        "xbox": "Gaming",
+        "playstation": "Gaming",
     }
 
     try:
-        # Connexion Gmail
+        # Connexion IMAP
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(email_to_scan, email_password)
         mail.select("inbox")
 
-        # Recherche d’e-mails de confirmation
-        typ, data = mail.search(None, '(SUBJECT "confirme" SUBJECT "bienvenue" SUBJECT "activation")')
-        ids = data[0].split()
+        # Générer la requête de recherche IMAP
+        search_parts = [f'SUBJECT "{kw}"' for kw in keywords]
+        search_query = "OR " * (len(keywords) - 1) + " ".join(search_parts)
+
+        # Ajouter la date si précisée
+        if since_date:
+            imap_date = datetime.strptime(since_date, "%Y-%m-%d").strftime(
+                "%d-%b-%Y"
+            )  # ex: 14-Apr-2025
+            search_query += f" SINCE {imap_date}"
+
+        typ, data = mail.search(None, f"({search_query})")
 
         found_services = set()
-
-        for num in ids:
+        for num in data[0].split():
             typ, msg_data = mail.fetch(num, "(RFC822)")
-            msg = email.message_from_bytes(msg_data[0][1])
-            sender = msg.get("From", "")
-            match = re.search(r'@([a-z0-9.-]+)', sender)
+            raw_msg = msg_data[0][1]
+            msg = email.message_from_bytes(raw_msg)
 
+            # Décodage de l’expéditeur
+            sender = msg.get("From", "")
+            match = re.search(r"@([a-z0-9.-]+)", sender)
             if match:
                 domain = match.group(1).split(".")[0].lower()
                 service_name = domain.capitalize()
                 category = domain_to_category.get(domain, "Autre")
                 found_services.add((service_name, category))
 
-        # Ajout des abonnements trouvés
-        for service_name, category in found_services:
-            db.create_subscription(
-                user_id=session["user_id"],
-                service_name=service_name,
-                category=category,
-                start_date=datetime.now().strftime("%Y-%m-%d"),
-                renewal_date=datetime.now().strftime("%Y-%m-%d"),
-                monthly_cost=0.00
-            )
+        # Enregistrer l'email si pas encore connue
+        db.save_email(session["user_id"], email_to_scan)
 
-        flash(f"{len(found_services)} abonnement(s) détecté(s) depuis {email_to_scan}.", "success")
+        # Enregistrer les services (éviter doublons)
+        for service_name, category in found_services:
+            existing = db_fetch(
+                """SELECT id FROM subscriptions
+                   WHERE user_id = ? AND email = ? AND service_name = ?""",
+                (session["user_id"], email_to_scan, service_name),
+                db_name=DBFILENAME,
+            )
+            if not existing:
+                db.create_subscription(
+                    user_id=session["user_id"],
+                    service_name=service_name,
+                    category=category,
+                    start_date=datetime.now().strftime("%Y-%m-%d"),
+                    renewal_date=datetime.now().strftime("%Y-%m-%d"),
+                    monthly_cost=0.00,
+                    email=email_to_scan,
+                )
+
+        flash(
+            f"{len(found_services)} service(s) détecté(s) à partir de {email_to_scan}.",
+            "success",
+        )
 
     except Exception as e:
-        flash(f"Erreur lors du scan IMAP : {str(e)}", "danger")
+        import traceback
+
+        traceback.print_exc()
+        flash(f"Erreur lors du scan : {str(e)}", "danger")
 
     return redirect(url_for("subscriptions"))
 
+
+@app.route("/delete_email", methods=["POST"])
+@login_required
+def delete_email():
+    email_to_delete = request.form.get("email")
+    user_id = session["user_id"]
+
+    # Supprimer d'abord les abonnements liés à cet email
+    db_run(
+        "DELETE FROM subscriptions WHERE user_id = ? AND email = ?",
+        (user_id, email_to_delete),
+        db_name=DBFILENAME,
+    )
+
+    # Supprimer l'adresse email de la table emails
+    db_run(
+        "DELETE FROM emails WHERE user_id = ? AND email = ?",
+        (user_id, email_to_delete),
+        db_name=DBFILENAME,
+    )
+
+    flash(f"L'adresse {email_to_delete} a été supprimée avec succès.", "success")
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/subscription/add", methods=["GET", "POST"])
@@ -324,6 +462,31 @@ def add_subscription():
         return redirect(url_for("subscriptions"))
 
     return render_template("add_subscription.html")
+
+
+@app.route("/subscription/edit/<int:id>", methods=["GET", "POST"])
+@login_required
+def edit_subscription(id):
+    sub = db.get_subscription(id)
+
+    if not sub or sub["user_id"] != session["user_id"]:
+        flash("Abonnement introuvable ou accès interdit", "danger")
+        return redirect(url_for("subscriptions"))
+
+    if request.method == "POST":
+        service_name = request.form.get("service_name")
+        category = request.form.get("category")
+        start_date = request.form.get("start_date")
+        renewal_date = request.form.get("renewal_date")
+        monthly_cost = float(request.form.get("monthly_cost"))
+
+        db.update_subscription(
+            id, service_name, category, start_date, renewal_date, monthly_cost
+        )
+        flash("Abonnement mis à jour avec succès", "success")
+        return redirect(url_for("subscriptions"))
+
+    return render_template("edit_subscription.html", subscription=sub)
 
 
 @app.route("/subscription/delete/<int:id>", methods=["POST"])

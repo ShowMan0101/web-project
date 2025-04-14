@@ -8,44 +8,50 @@
 
     <!-- Formulaire d'analyse Gmail -->
     <div class="card p-4 shadow-sm mb-5">
-        <!-- Scan Gmail via mot de passe d'application -->
-<div class="card p-4 shadow-sm mb-5">
-    <h5><i class="fas fa-envelope-open-text me-2"></i> Scanner une adresse Gmail</h5>
-    <form method="POST" action="{{ url_for('scan_email') }}" class="row g-3">
-        <div class="col-md-6">
-            <label for="scan_email" class="form-label">Adresse Gmail</label>
-            <input type="email" name="scan_email" id="scan_email" class="form-control" placeholder="ex: utilisateur@gmail.com" required>
-        </div>
-        <div class="col-md-6">
-            <label for="scan_password" class="form-label">
-                Mot de passe d’application
-                <a href="https://myaccount.google.com/apppasswords" target="_blank" class="ms-2 small">
-                    <i class="fas fa-question-circle"></i> Obtenir un mot de passe
-                </a>
-            </label>
-            <div class="input-group">
-                <input type="password" name="scan_password" id="scan_password" class="form-control" placeholder="Coller ici" required>
-                <span class="input-group-text bg-white">
-                    <i class="fas fa-eye toggle-password" style="cursor:pointer;" onclick="togglePassword('scan_password')"></i>
-                </span>
+        <h5><i class="fas fa-envelope-open-text me-2"></i> Scanner une adresse Gmail</h5>
+        <form method="POST" action="{{ url_for('scan_email') }}" class="row g-3">
+            <div class="col-md-6">
+                <label for="scan_email" class="form-label">Adresse Gmail</label>
+                <input type="email" name="scan_email" id="scan_email" class="form-control"
+                    placeholder="ex: utilisateur@gmail.com" required>
             </div>
+            <div class="col-md-6">
+                <label for="scan_password" class="form-label">
+                    Mot de passe d’application
+                    <a href="https://myaccount.google.com/apppasswords" target="_blank" class="ms-2 small">
+                        <i class="fas fa-question-circle"></i> Obtenir un mot de passe
+                    </a>
+                </label>
+                <div class="input-group">
+                    <input type="password" name="scan_password" id="scan_password" class="form-control"
+                        placeholder="Coller ici" required>
+                    <span class="input-group-text bg-white">
+                        <i class="fas fa-eye toggle-password" style="cursor:pointer;"
+                            onclick="togglePassword('scan_password')"></i>
+                    </span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label for="scan_since" class="form-label">Ne pas remonter avant</label>
+                <input type="date" name="scan_since" id="scan_since" class="form-control">
+            </div>
+
+            <div class="col-12 d-grid mt-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-1"></i> Lancer le scan
+                </button>
+            </div>
+        </form>
+
+        <div class="form-text mt-3 text-muted">
+            Nous vous recommandons d’utiliser un <strong>mot de passe d’application</strong> Google pour autoriser
+            l’accès en toute sécurité.
+            Ce mot de passe est généré dans vos <a href="https://myaccount.google.com/security"
+                target="_blank">paramètres de sécurité Google</a> et ne donne accès qu’aux emails.
         </div>
-
-        <div class="col-12 d-grid mt-2">
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-search me-1"></i> Lancer le scan
-            </button>
-        </div>
-    </form>
-
-    <div class="form-text mt-3 text-muted">
-        Nous vous recommandons d’utiliser un <strong>mot de passe d’application</strong> Google pour autoriser l’accès en toute sécurité.
-        Ce mot de passe est généré dans vos <a href="https://myaccount.google.com/security" target="_blank">paramètres de sécurité Google</a> et ne donne accès qu’aux emails.
-    </div>
-</div>
-
         <div class="form-text mt-2 text-muted">
-            Nous analysons uniquement les emails de confirmation d'inscription pour en extraire les services liés. Aucun accès prolongé ou stockage de votre mot de passe n'est effectué.
+            Nous analysons uniquement les emails de confirmation d'inscription pour en extraire les services liés. Aucun
+            accès prolongé ou stockage de votre mot de passe n'est effectué.
         </div>
     </div>
 
@@ -53,6 +59,26 @@
     {% if subscriptions %}
     <div class="card shadow-sm p-3">
         <h5 class="mb-3"><i class="fas fa-list me-2"></i> Abonnements détectés</h5>
+
+        <form method="GET" class="row g-2 mb-3">
+            <div class="col-md-4">
+                <input type="text" name="search" class="form-control" placeholder="Rechercher..." value="{{ search }}">
+            </div>
+            <div class="col-md-3">
+                <select name="sort" class="form-select">
+                    <option value="renewal_date" {% if sort=="renewal_date" %}selected{% endif %}>Tri par date</option>
+                    <option value="cost" {% if sort=="cost" %}selected{% endif %}>Tri par coût</option>
+                    <option value="service" {% if sort=="service" %}selected{% endif %}>Tri par nom</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="fas fa-filter"></i> Filtrer
+                </button>
+            </div>
+        </form>
+
+
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle">
                 <thead class="table-light">
@@ -62,6 +88,7 @@
                         <th>Date de création</th>
                         <th>Date de renouvellement</th>
                         <th>Coût estimé</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -71,11 +98,36 @@
                         <td>{{ sub.category or "Non classé" }}</td>
                         <td>{{ sub.start_date }}</td>
                         <td>{{ sub.renewal_date }}</td>
-                        <td>{{ "%.2f"|format(sub.monthly_cost) }} €</td>
+                        <td>{{ "%.2f"|format(sub.monthly_cost | float) }} €</td>
+                        <td>
+                            <a href="{{ url_for('edit_subscription', id=sub.id) }}"
+                                class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-pen"></i>
+                            </a>
+                            <form method="POST" action="{{ url_for('delete_subscription', id=sub.id) }}"
+                                class="d-inline" onsubmit="return confirm('Supprimer cet abonnement ?')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            {% if pages > 1 %}
+            <nav>
+                <ul class="pagination justify-content-center mt-4">
+                    {% for p in range(1, pages + 1) %}
+                    <li class="page-item {% if p == page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('subscriptions', page=p, search=search, sort=sort) }}">{{
+                            p }}</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </nav>
+            {% endif %}
+
         </div>
     </div>
     {% endif %}

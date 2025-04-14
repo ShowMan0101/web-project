@@ -73,23 +73,13 @@
                 <h2>Zone de danger</h2>
                 <p>Attention : ces actions sont irréversibles</p>
 
-                <button class="btn btn-danger" onclick="confirmDeleteAccount()">
-                    <i class="fas fa-trash-alt"></i>
-                    Supprimer mon compte
-                </button>
+                <form method="POST" action="{{ url_for('delete_account') }}" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.')">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash-alt"></i> Supprimer mon compte
+                    </button>
+                </form>
             </div>
         </div>
     </div>
 </div>
-
-
-
-<script>
-    function confirmDeleteAccount() {
-        if (confirm('Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.')) {
-            // Envoyer la requête de suppression
-            window.location.href = "{{ url_for('delete_account') }}";
-        }
-    }
-</script>
 {% endblock %}

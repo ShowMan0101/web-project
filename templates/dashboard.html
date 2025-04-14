@@ -3,260 +3,110 @@
 {% block title %}Tableau de bord - SubManager{% endblock %}
 
 {% block content %}
-<div class="dashboard-page">
-    <!-- En-tête avec salutation -->
-    <div class="dashboard-welcome">
-        <div class="welcome-text">
-            <h1>Bonjour {{ user.firstname if user.firstname else 'utilisateur' }} 👋</h1>
-            <p>Voici un aperçu de vos abonnements</p>
-        </div>
-        <div class="welcome-actions">
-            <button class="btn btn-primary" onclick="window.location.href='{{ url_for('add_subscription') }}'">
-                <i class="fas fa-plus"></i>
-                Ajouter un abonnement
-            </button>
-            <button class="btn btn-secondary" id="scanEmailsBtn">
-                <i class="fas fa-sync"></i>
-                Scanner mes emails
-            </button>
-        </div>
-    </div>
+<div class="dashboard-page py-4">
+    <h1 class="mb-4"><i class="fas fa-inbox me-2"></i> Mes adresses et comptes détectés</h1>
 
-    <!-- Cartes de statistiques -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #3498db;">
-                <i class="fas fa-receipt"></i>
-            </div>
-            <div class="stat-info">
-                <h3>Abonnements actifs</h3>
-                <p class="stat-number">{{ active_subscriptions|length }}</p>
-                <p class="stat-trend">
-                    {% if subscription_trend > 0 %}
-                    <i class="fas fa-arrow-up trend-up"></i>
-                    <span>+{{ subscription_trend }}% ce mois</span>
-                    {% else %}
-                    <i class="fas fa-arrow-down trend-down"></i>
-                    <span>{{ subscription_trend }}% ce mois</span>
-                    {% endif %}
-                </p>
+    <!-- Vue globale -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card text-white bg-primary shadow">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-envelope-open-text me-2"></i> Adresses trackées</h5>
+                    <p class="card-text fs-4">{{ email_count }}</p>
+                </div>
             </div>
         </div>
-
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #2ecc71;">
-                <i class="fas fa-euro-sign"></i>
-            </div>
-            <div class="stat-info">
-                <h3>Dépenses mensuelles</h3>
-                <p class="stat-number">{{ "%.2f"|format(total_monthly_cost) }}€</p>
-                <p class="stat-trend">
-                    {% if cost_trend > 0 %}
-                    <i class="fas fa-arrow-up trend-up"></i>
-                    <span>+{{ cost_trend }}% vs dernier mois</span>
-                    {% else %}
-                    <i class="fas fa-arrow-down trend-down"></i>
-                    <span>{{ cost_trend }}% vs dernier mois</span>
-                    {% endif %}
-                </p>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #e74c3c;">
-                <i class="fas fa-calendar-alt"></i>
-            </div>
-            <div class="stat-info">
-                <h3>Renouvellements proches</h3>
-                <p class="stat-number">{{ upcoming_renewals|length }}</p>
-                <p class="stat-text">Dans les 7 prochains jours</p>
-            </div>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #9b59b6;">
-                <i class="fas fa-envelope"></i>
-            </div>
-            <div class="stat-info">
-                <h3>Newsletters actives</h3>
-                <p class="stat-number">{{ newsletters|length }}</p>
-                <p class="stat-text">Sur {{ total_emails }} emails analysés</p>
+        <div class="col-md-6">
+            <div class="card text-white bg-success shadow">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-link me-2"></i> Comptes détectés</h5>
+                    <p class="card-text fs-4">{{ service_count }}</p>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Graphique des dépenses -->
-    <div class="dashboard-row">
-        <div class="chart-card">
-            <div class="card-header">
-                <h2>Évolution des dépenses</h2>
-                <select id="chartPeriod" class="period-select">
-                    <option value="week">Cette semaine</option>
-                    <option value="month" selected>Ce mois</option>
-                    <option value="year">Cette année</option>
-                </select>
+    <!-- Formulaire d'ajout d'adresse Gmail -->
+    <div class="card p-4 mb-4 shadow-sm">
+        <h5 class="mb-3"><i class="fas fa-envelope me-2"></i> Ajouter une nouvelle adresse Gmail</h5>
+        <form method="POST" action="{{ url_for('scan_email') }}" class="row g-3">
+            <div class="col-md-4">
+                <input type="email" name="scan_email" class="form-control" placeholder="ex: utilisateur@gmail.com" required>
             </div>
-            <canvas id="expensesChart"></canvas>
-        </div>
-
-        <!-- Répartition par catégorie -->
-        <div class="chart-card">
-            <div class="card-header">
-                <h2>Répartition par catégorie</h2>
+            <div class="col-md-4">
+                <input type="password" name="scan_password" class="form-control" placeholder="Mot de passe d'application" required>
             </div>
-            <canvas id="categoryChart"></canvas>
-        </div>
+            <div class="col-md-3">
+                <input type="date" name="scan_since" class="form-control" placeholder="Ne pas remonter avant">
+            </div>
+            <div class="col-md-1 d-grid">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </form>
+        <small class="form-text text-muted mt-2">
+            Utilisez un mot de passe d’application Gmail :
+            <a href="https://myaccount.google.com/apppasswords" target="_blank">obtenir un mot de passe</a>
+        </small>
     </div>
 
-    <!-- Prochains renouvellements -->
-    <div class="dashboard-row">
-        <div class="renewals-card">
-            <div class="card-header">
-                <h2>Prochains renouvellements</h2>
-                <a href="{{ url_for('subscriptions') }}" class="btn btn-text">Voir tout</a>
-            </div>
-            <div class="renewals-list">
-                {% for renewal in upcoming_renewals %}
-                <div class="renewal-item">
-                    <div class="renewal-info">
-                        <h3>{{ renewal.service_name }}</h3>
-                        <p>{{ renewal.renewal_date }}</p>
-                    </div>
-                    <div class="renewal-cost">
-                        <span>{{ "%.2f"|format(renewal.monthly_cost) }}€</span>
-                        <button class="btn btn-outline" onclick="renewSubscription({{ renewal.id }})">
-                            Renouveler
+    <!-- Liste des adresses trackées -->
+    {% if user_emails %}
+        {% for email_item in user_emails %}
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                <div>
+                    <h5 class="mb-0"><i class="fas fa-envelope me-2 text-primary"></i> {{ email_item.email }}</h5>
+                    <small class="text-muted">Ajoutée le {{ email_item.added_at }}</small>
+                </div>
+
+                <div class="d-flex align-items-center gap-2">
+                    <form method="POST" action="{{ url_for('scan_email') }}" class="d-flex">
+                        <input type="hidden" name="scan_email" value="{{ email_item.email }}">
+                        <input type="password" name="scan_password" placeholder="Mot de passe d'application" class="form-control d-inline w-auto me-2" required>
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="fas fa-sync-alt"></i>
                         </button>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
+                    </form>
 
-        <!-- Activité récente -->
-        <div class="activity-card">
-            <div class="card-header">
-                <h2>Activité récente</h2>
-            </div>
-            <div class="activity-list">
-                {% for activity in recent_activities %}
-                <div class="activity-item">
-                    <div class="activity-icon">
-                        {% if activity.type == 'add' %}
-                        <i class="fas fa-plus-circle"></i>
-                        {% elif activity.type == 'delete' %}
-                        <i class="fas fa-minus-circle"></i>
-                        {% elif activity.type == 'update' %}
-                        <i class="fas fa-edit"></i>
-                        {% endif %}
-                    </div>
-                    <div class="activity-info">
-                        <p>{{ activity.description }}</p>
-                        <span>{{ activity.date }}</span>
-                    </div>
+                    <form method="POST" action="{{ url_for('delete_email') }}" onsubmit="return confirm('Supprimer cette adresse et tous ses comptes liés ?')">
+                        <input type="hidden" name="email" value="{{ email_item.email }}">
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
                 </div>
-                {% endfor %}
+            </div>
+
+            <div class="card-body">
+                {% if email_item.services %}
+                <h6><i class="fas fa-link me-1"></i> Comptes détectés :</h6>
+                <ul class="list-group mb-3">
+                    {% for service in email_item.services %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ service.service_name }}</strong>
+                            <small class="text-muted ms-2">({{ service.category or 'Autre' }})</small>
+                        </div>
+                        <span class="badge bg-info text-dark">
+                            Depuis {{ service.start_date }}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="alert alert-secondary mb-0">
+                    Aucun compte détecté pour cette adresse.
+                </div>
+                {% endif %}
             </div>
         </div>
+        {% endfor %}
+    {% else %}
+    <div class="alert alert-info">
+        Aucune adresse enregistrée. <a href="{{ url_for('subscriptions') }}">Ajoutez-en une ici</a> pour commencer à scanner vos services.
     </div>
+    {% endif %}
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    // Configuration des graphiques
-    document.addEventListener('DOMContentLoaded', function () {
-        // Graphique des dépenses
-        const expensesCtx = document.getElementById('expensesChart').getContext('2d');
-        new Chart(expensesCtx, {
-            type: 'line',
-            data: {
-                labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'],
-                datasets: [{
-                    label: 'Dépenses mensuelles',
-                    data: [65, 59, 80, 81, 56, 55],
-                    borderColor: '#3498db',
-                    tension: 0.4,
-                    fill: true,
-                    backgroundColor: 'rgba(52, 152, 219, 0.1)'
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-
-        // Graphique des catégories
-        const categoryCtx = document.getElementById('categoryChart').getContext('2d');
-        new Chart(categoryCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Streaming', 'Musique', 'Gaming', 'Cloud', 'Autre'],
-                datasets: [{
-                    data: [30, 20, 15, 25, 10],
-                    backgroundColor: [
-                        '#3498db',
-                        '#2ecc71',
-                        '#e74c3c',
-                        '#9b59b6',
-                        '#f1c40f'
-                    ]
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-    });
-
-    // Fonction pour scanner les emails
-    document.getElementById('scanEmailsBtn').addEventListener('click', function () {
-        this.disabled = true;
-        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scan en cours...';
-
-        fetch('/scan-emails', {
-            method: 'POST'
-        })
-            .then(response => response.json())
-            .then(data => {
-                alert('Scan terminé ! ' + data.message);
-                window.location.reload();
-            })
-            .catch(error => {
-                alert('Erreur lors du scan : ' + error);
-            })
-            .finally(() => {
-                this.disabled = false;
-                this.innerHTML = '<i class="fas fa-sync"></i> Scanner mes emails';
-            });
-    });
-
-    // Fonction pour renouveler un abonnement
-    function renewSubscription(id) {
-        if (confirm('Voulez-vous renouveler cet abonnement ?')) {
-            fetch(`/subscription/renew/${id}`, {
-                method: 'POST'
-            })
-                .then(response => {
-                    if (response.ok) {
-                        window.location.reload();
-                    }
-                });
-        }
-    }
-</script>
 {% endblock %}
