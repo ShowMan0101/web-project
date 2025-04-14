@@ -1,11 +1,17 @@
+from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from subDB import DBFILENAME, SubscriptionsDB, db_run, db_update
 from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = "votre_clé_secrète"  # À changer en production
+app.secret_key = "secret key"  # À changer en production
 db = SubscriptionsDB()
+
+
+@app.context_processor
+def inject_year():
+    return {"current_year": datetime.now().year}
 
 
 # Décorateur pour vérifier si l'utilisateur est connecté
@@ -25,42 +31,44 @@ def index():
     return render_template("index.html")
 
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
+    if request.method == "POST":
+        email = request.form.get("email")
+        password = request.form.get("password")
 
         user = db.get_user(email)
-        if user and check_password_hash(user['password_hash'], password):
-            session['user_id'] = user['id']
-            flash('Connexion réussie!', 'success')
-            return redirect(url_for('dashboard'))
+        if user and check_password_hash(user["password_hash"], password):
+            session["user_id"] = user["id"]
+            flash("Connexion réussie!", "success")
+            return redirect(url_for("dashboard"))
 
-        flash('Email ou mot de passe incorrect', 'error')
+        flash("Email ou mot de passe incorrect", "error")
 
-    return render_template('login.html')
+    return render_template("login.html")
 
-@app.route('/register', methods=['GET', 'POST'])
+
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
+    if request.method == "POST":
+        email = request.form.get("email")
+        password = request.form.get("password")
+        confirm_password = request.form.get("confirm_password")
 
         if password != confirm_password:
-            flash('Les mots de passe ne correspondent pas', 'error')
-            return redirect(url_for('register'))
+            flash("Les mots de passe ne correspondent pas", "error")
+            return redirect(url_for("register"))
 
         if db.get_user(email):
-            flash('Cet email est déjà utilisé', 'error')
-            return redirect(url_for('register'))
+            flash("Cet email est déjà utilisé", "error")
+            return redirect(url_for("register"))
 
         db.create_user(email, generate_password_hash(password))
-        flash('Inscription réussie! Vous pouvez maintenant vous connecter', 'success')
-        return redirect(url_for('login'))
+        flash("Inscription réussie! Vous pouvez maintenant vous connecter", "success")
+        return redirect(url_for("login"))
 
-    return render_template('register.html')
+    return render_template("register.html")
+
 
 @app.route("/forgot_password", methods=["GET", "POST"])
 def forgot_password():
@@ -140,8 +148,9 @@ def update_notifications():
         (email_notifications, renewal_reminders, user_id),
         db_name=DBFILENAME,
     )
-    flash("Préférences de notification mises à jour!", "success")
-    return redirect(url_for("profile"))
+
+    flash("Préférences mises à jour avec succès !", "success")
+    return redirect(url_for("settings"))
 
 
 @app.route("/delete_account", methods=["POST"])
@@ -225,6 +234,80 @@ def subscriptions():
     )
 
 
+@app.route("/scan-email", methods=["POST"])
+@login_required
+def scan_email():
+    from datetime import datetime
+    import imaplib
+    import email
+    import re
+
+    email_to_scan = request.form.get("scan_email")
+    email_password = request.form.get("scan_password")
+
+    # Dictionnaire de correspondance domaine → catégorie
+    domain_to_category = {
+        "netflix": "Streaming",
+        "youtube": "Streaming",
+        "spotify": "Musique",
+        "deezer": "Musique",
+        "playstation": "Gaming",
+        "xbox": "Gaming",
+        "steam": "Gaming",
+        "dropbox": "Cloud",
+        "google": "Cloud",
+        "icloud": "Cloud",
+        "paypal": "Finance",
+        "revolut": "Finance",
+        "notion": "Productivité",
+        "adobe": "Design",
+        "amazon": "E-commerce",
+    }
+
+    try:
+        # Connexion Gmail
+        mail = imaplib.IMAP4_SSL("imap.gmail.com")
+        mail.login(email_to_scan, email_password)
+        mail.select("inbox")
+
+        # Recherche d’e-mails de confirmation
+        typ, data = mail.search(None, '(SUBJECT "confirme" SUBJECT "bienvenue" SUBJECT "activation")')
+        ids = data[0].split()
+
+        found_services = set()
+
+        for num in ids:
+            typ, msg_data = mail.fetch(num, "(RFC822)")
+            msg = email.message_from_bytes(msg_data[0][1])
+            sender = msg.get("From", "")
+            match = re.search(r'@([a-z0-9.-]+)', sender)
+
+            if match:
+                domain = match.group(1).split(".")[0].lower()
+                service_name = domain.capitalize()
+                category = domain_to_category.get(domain, "Autre")
+                found_services.add((service_name, category))
+
+        # Ajout des abonnements trouvés
+        for service_name, category in found_services:
+            db.create_subscription(
+                user_id=session["user_id"],
+                service_name=service_name,
+                category=category,
+                start_date=datetime.now().strftime("%Y-%m-%d"),
+                renewal_date=datetime.now().strftime("%Y-%m-%d"),
+                monthly_cost=0.00
+            )
+
+        flash(f"{len(found_services)} abonnement(s) détecté(s) depuis {email_to_scan}.", "success")
+
+    except Exception as e:
+        flash(f"Erreur lors du scan IMAP : {str(e)}", "danger")
+
+    return redirect(url_for("subscriptions"))
+
+
+
 @app.route("/subscription/add", methods=["GET", "POST"])
 @login_required
 def add_subscription():
@@ -258,6 +341,27 @@ def delete_subscription(id):
 def settings():
     user = db.get_user_by_id(session["user_id"])
     return render_template("settings.html", user=user)
+
+
+@app.route("/contact", methods=["GET", "POST"])
+def contact():
+    if request.method == "POST":
+        # Traitement du formulaire de contact ici
+        # Par exemple, envoi d'email ou enregistrement dans la base de données
+        name = request.form.get("name")
+        email = request.form.get("email")
+        subject = request.form.get("subject")
+        message = request.form.get("message")
+
+        # Code pour traiter le message
+
+        flash(
+            "Votre message a été envoyé avec succès. Nous vous répondrons bientôt.",
+            "success",
+        )
+        return redirect(url_for("contact"))
+
+    return render_template("contact.html")
 
 
 @app.route("/logout")
